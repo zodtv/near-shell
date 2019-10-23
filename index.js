@@ -9,6 +9,8 @@ const ncp = require('ncp').ncp;
 const rimraf = require('rimraf');
 const readline = require('readline');
 const URL = require('url').URL;
+const nacl = require('tweetnacl');
+const ed2curve = require('./ed2curve.js');
 
 ncp.limit = 16;
 
@@ -175,4 +177,56 @@ exports.login = async function(options) {
             rl.close();
         });
     }
+};
+
+function p_getSharedSecret(my_privKey_base58, target_pubKey_base58) {
+    var privKey_ed25519_bin;
+    try {
+        privKey_ed25519_bin = bs58.decode(my_privKey_base58);
+    } catch (e) {
+        console.log("privKey_error", "Failed to decode base58");
+        return;
+    }
+
+    var privKey_Curve25519_bin;
+    try {
+        privKey_Curve25519_bin = ed2curve.convertSecretKey(privKey_ed25519_bin);
+        //var res = nacl.sign.keyPair.fromSecretKey(binKey);
+        //publicKey = res.publicKey;
+        //secretKey = res.secretKey;
+    } catch (e) {
+        console.log("privKey_error", "Failed to convert ed25519 to Curve25519");
+        return;
+    }
+
+    var target_pubKey_bin = bs58.decode(target_pubKey_base58)
+    var target_pubKey_Curve25519 = ed2curve.convertPublicKey(target_pubKey_bin)
+
+    var shared_secret = nacl.box.before(target_pubKey_Curve25519, privKey_Curve25519_bin);
+    return shared_secret;
+}
+
+//./bin/near box dx7ex8BUnB4XXj4pSobpcDqXdiPkny4pFZXn4EAaV5p7zBakguwKEWzMJBhiPtus6MC8PAdpHviBVuEXUw41d43 9yfgNakMJNAcLumq6tmT3JkX9P4rNFmWf7zaLG3jLXpc hello_joe
+exports.box = async function(options) {
+    console.log(`Boxing with my privateKey ${options.privateKey} so publicKey ${options.publicKey} can view.`);
+    var sharedSecret = p_getSharedSecret(options.privateKey, options.publicKey);
+    var nonce = nacl.randomBytes(nacl.box.nonceLength);
+    var boxed = nacl.box.after((new TextEncoder()).encode(options.message), nonce, sharedSecret);
+    var nonceBoxed1 = Buffer.from(nonce);
+    var nonceBoxed2 = Buffer.from(boxed);
+    var nonceBoxed = Buffer.concat([nonce, boxed]);
+    var nonceBoxed_base58 = bs58.encode(nonceBoxed);
+    console.log(nonceBoxed_base58);
+};
+
+//./bin/near unbox dx7ex8BUnB4XXj4pSobpcDqXdiPkny4pFZXn4EAaV5p7zBakguwKEWzMJBhiPtus6MC8PAdpHviBVuEXUw41d43 9yfgNakMJNAcLumq6tmT3JkX9P4rNFmWf7zaLG3jLXpc 6G6SmxoTXsSBHKuTGqW82RLmE21NyAWHYLd6V8qUT5LdRQ82ZDquFKVg1usU3bhEMQN
+exports.unbox = async function(options) {
+    console.log(`Unboxing with my privateKey ${options.privateKey} and publicKey ${options.publicKey} can I view it.`);
+    var sharedSecret = p_getSharedSecret(options.privateKey, options.publicKey);
+    var nonceBox = bs58.decode(options.box);
+    var nonce = nonceBox.slice(0, 24)
+    var box = nonceBox.slice(24)
+    var unboxed = nacl.box.open.after(box, nonce, sharedSecret);
+    var text = (new TextDecoder()).decode(unboxed);
+    console.log(text);
 };
