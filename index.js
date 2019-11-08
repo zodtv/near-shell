@@ -206,16 +206,21 @@ function p_getSharedSecret(my_privKey_base58, target_pubKey_base58) {
     return shared_secret;
 }
 
-//./bin/near box dx7ex8BUnB4XXj4pSobpcDqXdiPkny4pFZXn4EAaV5p7zBakguwKEWzMJBhiPtus6MC8PAdpHviBVuEXUw41d43 9yfgNakMJNAcLumq6tmT3JkX9P4rNFmWf7zaLG3jLXpc hello_joe
-exports.box = async function(options) {
-    console.log(`Boxing with my privateKey ${options.privateKey} so publicKey ${options.publicKey} can view.`);
-    var sharedSecret = p_getSharedSecret(options.privateKey, options.publicKey);
+function p_box(sharedSecret, message) {
     var nonce = nacl.randomBytes(nacl.box.nonceLength);
-    var boxed = nacl.box.after((new TextEncoder()).encode(options.message), nonce, sharedSecret);
+    var boxed = nacl.box.after((new TextEncoder()).encode(message), nonce, sharedSecret);
     var nonceBoxed1 = Buffer.from(nonce);
     var nonceBoxed2 = Buffer.from(boxed);
     var nonceBoxed = Buffer.concat([nonce, boxed]);
     var nonceBoxed_base58 = bs58.encode(nonceBoxed);
+    return nonceBoxed_base58;
+}
+
+//./bin/near box dx7ex8BUnB4XXj4pSobpcDqXdiPkny4pFZXn4EAaV5p7zBakguwKEWzMJBhiPtus6MC8PAdpHviBVuEXUw41d43 9yfgNakMJNAcLumq6tmT3JkX9P4rNFmWf7zaLG3jLXpc hello_joe
+exports.box = async function(options) {
+    console.log(`Boxing with my privateKey ${options.privateKey} so publicKey ${options.publicKey} can view.`);
+    var sharedSecret = p_getSharedSecret(options.privateKey, options.publicKey);
+    var nonceBoxed_base58 = p_box(sharedSecret, options.message);
     console.log(nonceBoxed_base58);
 };
 
@@ -229,4 +234,33 @@ exports.unbox = async function(options) {
     var unboxed = nacl.box.open.after(box, nonce, sharedSecret);
     var text = (new TextDecoder()).decode(unboxed);
     console.log(text);
+};
+
+
+
+exports.jobInsert = async function(options) {
+    console.log(`Inserting a new job with my privateKey ${options.privateKey} so publicKey ${options.publicKey} can view.`);
+    var sharedSecret = p_getSharedSecret(options.privateKey, options.publicKey);
+    var nonceBoxed_base58 = p_box(sharedSecret, options.message);
+
+    const near = await connect(options);
+    const account = await near.account(options.accountId);
+    const functionCallResponse = await account.functionCall("contract-zod-tv", "jobInsert", JSON.parse(options.args || '{}'), options.amount);
+    const result = nearjs.providers.getTransactionLastResult(functionCallResponse);
+    console.log(result);
+    console.log(inspectResponse(result));
+};
+
+exports.jobSetMetadata = async function(options) {
+    console.log(`Setting jobMetadata with my privateKey ${options.privateKey} so publicKey ${options.publicKey} can view.`);
+    var sharedSecret = p_getSharedSecret(options.privateKey, options.publicKey);
+    var nonceBoxed_base58 = p_box(sharedSecret, options.message);
+
+    var nonce = nacl.randomBytes(nacl.box.nonceLength);
+    var boxed = nacl.box.after((new TextEncoder()).encode(options.message), nonce, sharedSecret);
+    var nonceBoxed1 = Buffer.from(nonce);
+    var nonceBoxed2 = Buffer.from(boxed);
+    var nonceBoxed = Buffer.concat([nonce, boxed]);
+    var nonceBoxed_base58 = bs58.encode(nonceBoxed);
+    console.log(nonceBoxed_base58);
 };
