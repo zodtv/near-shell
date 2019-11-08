@@ -1,6 +1,3 @@
-const nearjs = require('nearlib');
-const { KeyPair, keyStores } = require('nearlib');
-const UnencryptedFileSystemKeyStore = keyStores.UnencryptedFileSystemKeyStore;
 const fs = require('fs');
 const util = require('util');
 const yargs = require('yargs');
@@ -11,6 +8,12 @@ const readline = require('readline');
 const URL = require('url').URL;
 const nacl = require('tweetnacl');
 const ed2curve = require('./ed2curve.js');
+
+const nearjs = require('nearlib');
+const { KeyPair, keyStores } = require('nearlib');
+const UnencryptedFileSystemKeyStore = keyStores.UnencryptedFileSystemKeyStore;
+
+const connect = require('./utils/connect');
 
 ncp.limit = 16;
 
@@ -41,15 +44,6 @@ exports.clean = async function() {
     await rmDirFn();
     console.log('Clean complete.');
 };
-
-async function connect(options) {
-    const keyStore = new UnencryptedFileSystemKeyStore('./neardev');
-    options.deps = {
-        keyStore,
-    };
-    // TODO: search for key store.
-    return await nearjs.connect(options);
-}
 
 exports.createAccount = async function(options) {
     let near = await connect(options);
@@ -95,7 +89,7 @@ exports.keys = async function(options) {
 
 exports.txStatus = async function(options) {
     let near = await connect(options);
-    let status = await near.connection.provider.txStatus(bs58.decode(options.hash));
+    let status = await near.connection.provider.txStatus(bs58.decode(options.hash), options.accountId || options.masterAccount);
     console.log(`Transaction ${options.hash}`);
     console.log(inspectResponse(status));
 };
