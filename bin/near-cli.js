@@ -198,14 +198,14 @@ const box = {
   command: 'box <privateKey> <publicKey> <message>',
   desc: 'base58 curve25519 secret box (pass ed25519 keys)',
   builder: (yargs) => yargs,
-  handler: (argv) => exitOnError(main.box(argv))
+  handler: exitOnError(main.box)
 };
 
 const unbox = {
   command: 'unbox <privateKey> <publicKey> <box>',
   desc: 'base58 curve25519 secret unbox (pass ed25519 keys)',
   builder: (yargs) => yargs,
-  handler: (argv) => exitOnError(main.unbox(argv))
+  handler: exitOnError(main.unbox)
 };
 
 let config = require('../get-config')();

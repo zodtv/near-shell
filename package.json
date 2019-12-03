@@ -23,7 +23,7 @@
     "near-cli.js": "./bin/near-cli.js"
   },
   "devDependencies": {
-    "eslint": "^6.4.0",
+    "eslint": "^6.6.0",
     "strip-ansi-cli": "^2.0.0"
   },
   "dependencies": {
@@ -34,7 +34,8 @@
     "nearlib": "^0.17.0",
     "rimraf": "^3.0.0",
     "yargs": "^14.2.0",
-    "tweetnacl": "^1.0.1"
+    "tweetnacl": "^1.0.1",
+    "tweetnacl-util": "^0.15.0"
   },
   "keywords": [
     "blockchain",

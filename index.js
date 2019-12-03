@@ -7,6 +7,7 @@ const rimraf = require('rimraf');
 const readline = require('readline');
 const URL = require('url').URL;
 const nacl = require('tweetnacl');
+const nacl_util = require('tweetnacl-util');
 const ed2curve = require('./ed2curve.js');
 
 const nearjs = require('nearlib');
@@ -173,40 +174,25 @@ exports.login = async function(options) {
     }
 };
 
-function p_getSharedSecret(my_privKey_base58, target_pubKey_base58) {
-    var privKey_ed25519_bin;
-    try {
-        privKey_ed25519_bin = bs58.decode(my_privKey_base58);
-    } catch (e) {
-        console.log("privKey_error", "Failed to decode base58");
-        return;
-    }
+function p_getSharedSecret(publicKey_base58, secretKey_base58) {
+    var publicKey_Curve25519_bin = ed2curve.convertPublicKey(new Uint8Array(bs58.decode(publicKey_base58).buffer))
+    var secretKey_Curve25519_bin = ed2curve.convertSecretKey(new Uint8Array(bs58.decode(secretKey_base58).buffer));
 
-    var privKey_Curve25519_bin;
-    try {
-        privKey_Curve25519_bin = ed2curve.convertSecretKey(privKey_ed25519_bin);
-        //var res = nacl.sign.keyPair.fromSecretKey(binKey);
-        //publicKey = res.publicKey;
-        //secretKey = res.secretKey;
-    } catch (e) {
-        console.log("privKey_error", "Failed to convert ed25519 to Curve25519");
-        return;
-    }
-
-    var target_pubKey_bin = bs58.decode(target_pubKey_base58)
-    var target_pubKey_Curve25519 = ed2curve.convertPublicKey(target_pubKey_bin)
-
-    var shared_secret = nacl.box.before(target_pubKey_Curve25519, privKey_Curve25519_bin);
+    var shared_secret = nacl.box.before(publicKey_Curve25519_bin, secretKey_Curve25519_bin);
     return shared_secret;
 }
 
 function p_box(sharedSecret, message) {
     var nonce = nacl.randomBytes(nacl.box.nonceLength);
-    var boxed = nacl.box.after((new TextEncoder()).encode(message), nonce, sharedSecret);
-    var nonceBoxed1 = Buffer.from(nonce);
-    var nonceBoxed2 = Buffer.from(boxed);
-    var nonceBoxed = Buffer.concat([nonce, boxed]);
-    var nonceBoxed_base58 = bs58.encode(nonceBoxed);
+
+    var message = (new TextEncoder()).encode(message)
+    var encrypted = nacl.box.after(message, nonce, sharedSecret);
+
+    const fullMessage = new Uint8Array(nonce.length + encrypted.length);
+    fullMessage.set(nonce);
+    fullMessage.set(encrypted, nonce.length);
+
+    var nonceBoxed_base58 = bs58.encode(Buffer.from(fullMessage.buffer));
     return nonceBoxed_base58;
 }
 
@@ -214,6 +200,7 @@ function p_box(sharedSecret, message) {
 exports.box = async function(options) {
     console.log(`Boxing with my privateKey ${options.privateKey} so publicKey ${options.publicKey} can view.`);
     var sharedSecret = p_getSharedSecret(options.privateKey, options.publicKey);
+
     var nonceBoxed_base58 = p_box(sharedSecret, options.message);
     console.log(nonceBoxed_base58);
 };
@@ -222,16 +209,20 @@ exports.box = async function(options) {
 exports.unbox = async function(options) {
     console.log(`Unboxing with my privateKey ${options.privateKey} and publicKey ${options.publicKey} can I view it.`);
     var sharedSecret = p_getSharedSecret(options.privateKey, options.publicKey);
+
     var nonceBox = bs58.decode(options.box);
-    var nonce = nonceBox.slice(0, 24)
-    var box = nonceBox.slice(24)
-    var unboxed = nacl.box.open.after(box, nonce, sharedSecret);
+
+    const nonce = nonceBox.slice(0, 24);
+    const message = nonceBox.slice(24, options.box.length);
+
+    var unboxed = nacl.box.open.after(message, nonce, sharedSecret);
+
     var text = (new TextDecoder()).decode(unboxed);
     console.log(text);
 };
 
 
-
+/*
 exports.jobInsert = async function(options) {
     console.log(`Inserting a new job with my privateKey ${options.privateKey} so publicKey ${options.publicKey} can view.`);
     var sharedSecret = p_getSharedSecret(options.privateKey, options.publicKey);
@@ -239,7 +230,7 @@ exports.jobInsert = async function(options) {
 
     const near = await connect(options);
     const account = await near.account(options.accountId);
-    const functionCallResponse = await account.functionCall("contract-zod-tv", "jobInsert", JSON.parse(options.args || '{}'), options.amount);
+    const functionCallResponse = await account.functionCall("contract-zod-tv3", "jobInsert", JSON.parse(options.args || '{}'), options.amount);
     const result = nearjs.providers.getTransactionLastResult(functionCallResponse);
     console.log(result);
     console.log(inspectResponse(result));
@@ -249,12 +240,52 @@ exports.jobSetMetadata = async function(options) {
     console.log(`Setting jobMetadata with my privateKey ${options.privateKey} so publicKey ${options.publicKey} can view.`);
     var sharedSecret = p_getSharedSecret(options.privateKey, options.publicKey);
     var nonceBoxed_base58 = p_box(sharedSecret, options.message);
-
-    var nonce = nacl.randomBytes(nacl.box.nonceLength);
-    var boxed = nacl.box.after((new TextEncoder()).encode(options.message), nonce, sharedSecret);
-    var nonceBoxed1 = Buffer.from(nonce);
-    var nonceBoxed2 = Buffer.from(boxed);
-    var nonceBoxed = Buffer.concat([nonce, boxed]);
-    var nonceBoxed_base58 = bs58.encode(nonceBoxed);
-    console.log(nonceBoxed_base58);
 };
+*/
+
+
+
+function test() {
+    var keya = ed2curve.convertKeyPair(nacl.sign.keyPair());
+    var keyb = ed2curve.convertKeyPair(nacl.sign.keyPair());
+
+    var anotherMessage = nacl_util.decodeUTF8('Keep silence');
+    var nonce2 = nacl.randomBytes(nacl.box.nonceLength);
+
+    var shared_secreta = nacl.box.before(keyb.publicKey, keya.secretKey);
+    var shared_secretb = nacl.box.before(keya.publicKey, keyb.secretKey);
+    console.log(shared_secreta);
+    console.log(shared_secretb);
+
+    var encryptedMessage = nacl.box.after(anotherMessage, nonce2, shared_secreta);
+    var decryptedMessage = nacl.box.open.after(encryptedMessage, nonce2, shared_secretb);
+    console.log(decryptedMessage);
+}
+
+function test2() {
+    var keya = {
+        publicKey: "6gsFQoMjwfkfjwgppzjK6np1PKLTEvWZTN96RHprtm9t",
+        secretKey: "5NiZkxxboVYh9haKC7miLG8sjbQnaaQCvqqbxbb6Qi9uhVY1mkiv37yh24WKvAYXxag6jzydhVw7U4r1G3ZrcdEJ",
+    }
+    var keyb = {
+        publicKey: "BxJtrTRehNH38dt9N5szDgXyFQtTe7JoxSrGdXXuKSDj",
+        secretKey: "4GU1NUhz62VHnZxMVfJrRn489naWNt6P2q5qWGhACoFBLi27Xfq8svdmKd6yP8MtAAkcEHP124jtgn2Re4diUbLR",
+    }
+    var wtfa = nacl.sign.keyPair.fromSecretKey(bs58.decode("5NiZkxxboVYh9haKC7miLG8sjbQnaaQCvqqbxbb6Qi9uhVY1mkiv37yh24WKvAYXxag6jzydhVw7U4r1G3ZrcdEJ"))
+    var wtfb = nacl.sign.keyPair.fromSecretKey(bs58.decode("4GU1NUhz62VHnZxMVfJrRn489naWNt6P2q5qWGhACoFBLi27Xfq8svdmKd6yP8MtAAkcEHP124jtgn2Re4diUbLR"))
+    console.log(bs58.encode(Buffer.from(wtfa.publicKey)));
+    console.log(bs58.encode(Buffer.from(wtfb.publicKey)));
+
+    var shared_secreta = p_getSharedSecret(keyb.publicKey, keya.secretKey);
+    var shared_secretb = p_getSharedSecret(keya.publicKey, keyb.secretKey);
+
+    console.log(shared_secreta);
+    console.log(shared_secretb);
+
+    var anotherMessage = nacl_util.decodeUTF8('Keep silence');
+    var nonce = nacl.randomBytes(nacl.box.nonceLength);
+
+    var encryptedMessage = nacl.box.after(anotherMessage, nonce, shared_secreta);
+    var decryptedMessage = nacl.box.open.after(encryptedMessage, nonce, shared_secretb);
+    console.log(decryptedMessage);
+}
